@@ -1,0 +1,59 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Azure Mirror (Read-only Source View)</h2>
+  <p>This view strictly follows Azure DevOps sprint categorization and refreshes from sync.</p>
+  <p>
+    {% if sync_state %}
+      Last synced: {{ sync_state.last_synced_at }} ({{ sync_state.last_status }})
+    {% else %}
+      Last synced: never
+    {% endif %}
+  </p>
+  {% if can_trigger_sync %}
+    <p><a href="/?sync=1">Run Sync Now</a></p>
+  {% endif %}
+</div>
+
+{% for sprint, stories in stories_by_sprint.items %}
+  <div class="card">
+    <h3>{{ sprint }} ({{ stories|length }})</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Ticket ID</th>
+          <th>Title</th>
+          <th>Assigned To</th>
+          <th>Current State</th>
+          <th>Sprint</th>
+          <th>Target Date</th>
+          <th>Cost Approved?</th>
+          <th>Cost Approved When</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for story in stories %}
+        <tr>
+          <td>#{{ story.work_item_id }}</td>
+          <td>
+            {% if story.azure_url %}
+              <a href="{{ story.azure_url }}" target="_blank" rel="noreferrer">{{ story.title }}</a>
+            {% else %}
+              {{ story.title }}
+            {% endif %}
+          </td>
+          <td>{{ story.assigned_to }}</td>
+          <td>{{ story.state }}</td>
+          <td>{{ story.sprint_name }}</td>
+          <td>{{ story.target_date }}</td>
+          <td>{{ story.cost_approved }}</td>
+          <td>{{ story.cost_approved_at }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% empty %}
+  <div class="card">No Azure tickets have been synced yet.</div>
+{% endfor %}
+{% endblock %}

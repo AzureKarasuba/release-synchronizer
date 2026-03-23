@@ -1,0 +1,90 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Manual Release Plan (Drag & Drop)</h2>
+  <p>Default grouping follows Azure sprint alignment; drag tickets across release columns to override for business planning.</p>
+</div>
+
+{% if release_groups %}
+<div class="board" id="release-board">
+  {% for group in release_groups %}
+    <section class="release-column">
+      <h3>{{ group.release.name }}</h3>
+      <p><small>{{ group.release.code }}</small></p>
+      <div class="dropzone" data-release-id="{{ group.release.id }}">
+        {% for story in group.stories %}
+          <article class="story-card" draggable="{{ can_edit|yesno:'true,false' }}" data-story-id="{{ story.id }}">
+            <div><strong>#{{ story.work_item_id }}</strong> {{ story.title }}</div>
+            <div><small>{{ story.assigned_to }} | {{ story.state }}</small></div>
+            <div><small>Sprint: {{ story.sprint_name }} | Target: {{ story.target_date }}</small></div>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+</div>
+{% else %}
+  <div class="card">No synchronized tickets available yet. Run sync from Azure Mirror.</div>
+{% endif %}
+
+<script>
+(function () {
+  const canEdit = {{ can_edit|yesno:"true,false" }};
+  if (!canEdit) return;
+
+  let draggedStoryId = null;
+
+  document.querySelectorAll('.story-card').forEach((card) => {
+    card.addEventListener('dragstart', (e) => {
+      draggedStoryId = card.dataset.storyId;
+      e.dataTransfer.effectAllowed = 'move';
+    });
+  });
+
+  document.querySelectorAll('.dropzone').forEach((zone) => {
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      zone.classList.add('drop-hover');
+    });
+
+    zone.addEventListener('dragleave', () => zone.classList.remove('drop-hover'));
+
+    zone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      zone.classList.remove('drop-hover');
+      const releaseId = zone.dataset.releaseId;
+      if (!draggedStoryId || !releaseId) return;
+
+      const body = new URLSearchParams({
+        story_id: draggedStoryId,
+        release_id: releaseId,
+        reason: 'Moved via manual board drag-drop',
+      });
+
+      const response = await fetch('{% url "manual-move-story" %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body,
+      });
+
+      if (response.ok) {
+        window.location.reload();
+      } else {
+        alert('Move failed. Please refresh and retry.');
+      }
+    });
+  });
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return '';
+  }
+})();
+</script>
+{% endblock %}

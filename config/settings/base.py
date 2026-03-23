@@ -2,11 +2,13 @@
 from pathlib import Path
 
 import dj_database_url
-from django.core.management.utils import get_random_secret_key
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", get_random_secret_key())
+# Keep fallback stable in local/dev to avoid invalidating sessions on each restart.
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-secret-key-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
@@ -30,6 +32,7 @@ INSTALLED_APPS = [
     "apps.mismatch",
     "apps.audit",
     "apps.api",
+    "apps.coordination",
 ]
 
 MIDDLEWARE = [
@@ -94,6 +97,12 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ],
 }
+
+# Azure DevOps integration settings
+ADO_ORGANIZATION = os.getenv("ADO_ORGANIZATION", "")
+ADO_PROJECT = os.getenv("ADO_PROJECT", "")
+ADO_PAT = os.getenv("ADO_PAT", "")
+ADO_SYNC_INTERVAL_SECONDS = int(os.getenv("ADO_SYNC_INTERVAL_SECONDS", "300"))
 
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"

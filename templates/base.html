@@ -8,6 +8,7 @@
     body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; background: #f5f7fb; color: #1f2937; }
     header { background: #0f172a; color: white; padding: 12px 18px; }
     header nav a { color: #cbd5e1; margin-right: 14px; text-decoration: none; }
+    header .auth { float: right; font-size: 13px; color: #94a3b8; }
     main { padding: 18px; }
     .card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
     .messages { margin-bottom: 14px; }
@@ -15,20 +16,30 @@
     table { width: 100%; border-collapse: collapse; background: white; }
     th, td { border-bottom: 1px solid #e2e8f0; text-align: left; padding: 8px; }
     th { background: #f8fafc; }
+
+    .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+    .release-column { background: #fff; border: 1px solid #dbe2ea; border-radius: 10px; padding: 10px; }
+    .dropzone { min-height: 80px; padding: 6px; border-radius: 8px; background: #f8fafc; }
+    .drop-hover { outline: 2px dashed #0ea5e9; background: #e0f2fe; }
+    .story-card { background: white; border: 1px solid #dbe2ea; border-radius: 8px; padding: 8px; margin-bottom: 8px; cursor: grab; }
+    .story-card:active { cursor: grabbing; }
   </style>
 </head>
 <body>
   <header>
     <strong>Release Synchronizer</strong>
     <nav>
-      <a href="/">Dashboard</a>
-      <a href="/release-plans/">Release Plans</a>
-      <a href="/approvals/">Approvals</a>
-      <a href="/mappings/">Mappings</a>
-      <a href="/vendor-actions/">Vendor Queue</a>
-      <a href="/mismatch/">Mismatch</a>
-      <a href="/audit/">Audit</a>
+      <a href="/">Azure Mirror</a>
+      <a href="/manual/">Manual Plan</a>
+      <a href="/diff/">Diff & Apply</a>
     </nav>
+    <div class="auth">
+      {% if request.user.is_authenticated %}
+        {{ request.user.username }} | <a href="/accounts/logout/" style="color:#cbd5e1;">Logout</a>
+      {% else %}
+        <a href="/accounts/login/" style="color:#cbd5e1;">Login</a>
+      {% endif %}
+    </div>
   </header>
   <main>
     {% if messages %}

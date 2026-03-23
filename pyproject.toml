@@ -21,3 +21,8 @@ dev = [
   "pytest-django>=4.9,<5.0",
   "ruff>=0.6,<1.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apps*", "config*"]
+exclude = ["tests*", "templates*", "docs*"]

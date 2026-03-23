@@ -1,15 +1,16 @@
 ﻿# MVP Tradeoffs
 
 ## Included now
-- Strong data model for releases, approvals, mappings, vendor actions, mismatch findings, and audit events.
-- Role-based visibility and basic object-level constraints for vendor users.
-- Management commands for import, mismatch scan, role assignment, and demo seeding.
+- Live-friendly sync plumbing to Azure iterations + user stories.
+- Three-screen workflow optimized for internal release coordination.
+- Manual-vs-Azure mismatch visualization with action controls.
+- Drag-and-drop manual plan board.
 
-## Deferred to next iteration
-- Bi-directional Azure DevOps sync.
-- Notification and escalation channels (Slack/Teams/email).
-- Field-level encryption and advanced masking policy engine.
-- Async workers (Celery/Redis) and retry orchestration for long-running jobs.
+## Deferred
+- Full two-way bulk writeback with conflict resolution strategy.
+- Complex field-level masking policies per customer/vendor contract.
+- Async queue framework and retry backoff workers (Celery/Redis).
+- Real-time push updates and collaborative editing locks.
 
-## Why this split
-This keeps the prototype realistic and interview-credible while remaining implementable by one engineer in a short timeline.
+## Why this is credible
+This MVP demonstrates production-style workflow behavior without overbuilding infrastructure too early.

@@ -1,29 +1,55 @@
 ﻿# Release Synchronizer
 
-Production-style internal coordination tool prototype built with Django.
+Production-style internal coordination prototype for release planning on top of Azure DevOps.
 
-## Purpose
-Release Synchronizer adds a business-controlled coordination layer on top of Azure DevOps execution tracking:
-- Manual release plan management with change reasons
-- Cost approval lifecycle tracking
-- Release-to-sprint mapping
-- Vendor action queue and follow-up
-- Mismatch detection and triage
-- Auditability with role-aware visibility
+## Core Workflow (Current)
+The app now centers on three views:
+1. **Azure Mirror** (`/`): strict source-aligned view grouped by Azure sprint.
+2. **Manual Plan** (`/manual/`): release-based planning board with drag-and-drop reassignment.
+3. **Diff & Apply** (`/diff/`): compare Azure vs manual placement and choose reset/apply actions.
 
-## Quick Start
-1. Create virtual environment and install dependencies.
-2. Set env vars from `.env.example`.
-3. Run migrations:
-   - `python manage.py migrate`
-4. Create admin user:
-   - `python manage.py createsuperuser`
-5. Seed demo data (optional but recommended):
-   - `python manage.py seed_demo_data`
-6. Start server:
-   - `python manage.py runserver`
+## What Sync Does
+- Pulls **Azure iterations (sprints)**.
+- Pulls **Azure User Story work items**.
+- Upserts ticket fields: ID, title, assignee, state, sprint, target date.
+- Auto-creates release buckets from sprint structure (default behavior).
 
-## Demo Users (from seed command)
+## Setup
+1. Create and activate virtual environment.
+2. Install dependencies.
+3. Configure `.env` from `.env.example`.
+4. Run migrations.
+5. Seed demo data (optional).
+
+```bash
+python manage.py migrate
+python manage.py seed_demo_data
+```
+
+## Run
+```bash
+python manage.py runserver
+```
+
+## Azure Sync Commands
+- One-shot sync:
+```bash
+python manage.py sync_ado --force
+```
+
+- Continuous sync worker (every 5 minutes by default):
+```bash
+python manage.py run_ado_sync_worker --interval 300
+```
+
+## Azure Env Vars
+Set these in `.env`:
+- `ADO_ORGANIZATION`
+- `ADO_PROJECT`
+- `ADO_PAT`
+- `ADO_SYNC_INTERVAL_SECONDS` (default `300`)
+
+## Demo Users (seeded)
 - `rm_demo` (release manager)
 - `eng_demo` (engineering lead)
 - `fin_demo` (finance approver)
@@ -31,35 +57,5 @@ Release Synchronizer adds a business-controlled coordination layer on top of Azu
 - `vendor_demo` (vendor user)
 - `exec_demo` (executive viewer)
 
-Default password: `ChangeMe123!` (override via `--password` when seeding).
+Default password: `ChangeMe123!` (override with `--password`).
 
-## Role-Based Visibility Rules (MVP)
-- Cost fields are visible only to release manager, finance approver, and system admin.
-- Vendor users only see vendor actions assigned to themselves.
-- Audit and mismatch APIs are restricted to internal staff roles.
-- Vendor users can update only vendor action status through dedicated workflow.
-
-## Management Commands
-- `python manage.py assign_role <username> <role>`
-- `python manage.py import_ado_snapshot <csv_path> --project <project_name>`
-- `python manage.py run_mismatch_scan`
-- `python manage.py seed_demo_data [--password <value>]`
-
-## Key API Endpoints
-- `POST /api/mismatch-scan/run`
-- `GET /api/releases/<release_item_id>/mismatches`
-- `POST /api/vendor-actions/<action_id>/status`
-- `GET /api/audit-events`
-- `POST /api/ado/sprint-snapshots/import`
-
-## Apps
-- `apps/releases`: release plans and release items
-- `apps/approvals`: cost approval workflow
-- `apps/integrations`: Azure DevOps sprint snapshots
-- `apps/mappings`: release-to-sprint mapping
-- `apps/vendor_queue`: vendor follow-up queue
-- `apps/mismatch`: mismatch detection findings
-- `apps/audit`: append-only audit events
-- `apps/accounts`: role bootstrap and user account helpers
-- `apps/api`: integration and operational endpoints
-- `apps/common`: shared base classes and utilities

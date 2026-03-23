@@ -1,0 +1,47 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Diff & Apply</h2>
+  <p>Shows differences between current Azure sprint categorization and manually managed release plan placement.</p>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Ticket</th>
+      <th>Azure Sprint</th>
+      <th>Azure Release</th>
+      <th>Manual Release</th>
+      <th>Manual -> Azure Mapping</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td>#{{ row.story.work_item_id }} {{ row.story.title }}</td>
+      <td>{{ row.story.sprint_name }}</td>
+      <td>{{ row.azure_release.name }}</td>
+      <td>{{ row.manual_release.name }}</td>
+      <td>{{ row.manual_release.default_azure_iteration_path|default:'(not set)' }}</td>
+      <td>
+        {% if can_apply %}
+          <form method="post" action="{% url 'diff-reset-story' row.story.id %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit">Reset To Azure</button>
+          </form>
+          <form method="post" action="{% url 'diff-apply-story' row.story.id %}" style="display:inline; margin-left:6px;">
+            {% csrf_token %}
+            <button type="submit" {% if not row.manual_release.default_azure_iteration_path %}disabled{% endif %}>Apply Manual To Azure</button>
+          </form>
+        {% else %}
+          View only
+        {% endif %}
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="6">No differences currently detected.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

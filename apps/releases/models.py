@@ -29,6 +29,10 @@ class ReleasePlan(TimeStampedModel):
     target_end_date = models.DateField(null=True, blank=True)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="owned_release_plans")
 
+    # Auto-generated releases mirror Azure sprint categories by default.
+    is_auto_generated = models.BooleanField(default=False)
+    default_azure_iteration_path = models.CharField(max_length=255, blank=True)
+
     class Meta:
         ordering = ["-created_at"]
 

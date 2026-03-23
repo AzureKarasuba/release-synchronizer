@@ -5,9 +5,18 @@ from apps.releases.models import ReleaseItem, ReleasePlan
 
 @admin.register(ReleasePlan)
 class ReleasePlanAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "business_unit", "status", "target_start_date", "target_end_date")
-    search_fields = ("code", "name", "business_unit")
-    list_filter = ("status", "business_unit")
+    list_display = (
+        "code",
+        "name",
+        "business_unit",
+        "status",
+        "is_auto_generated",
+        "default_azure_iteration_path",
+        "target_start_date",
+        "target_end_date",
+    )
+    search_fields = ("code", "name", "business_unit", "default_azure_iteration_path")
+    list_filter = ("status", "business_unit", "is_auto_generated")
 
 
 @admin.register(ReleaseItem)

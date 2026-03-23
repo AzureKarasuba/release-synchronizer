@@ -1,4 +1,6 @@
 ﻿from django.contrib.auth.mixins import UserPassesTestMixin
+from django.contrib.auth.views import redirect_to_login
+from django.core.exceptions import PermissionDenied
 
 from apps.accounts.models import RoleAssignment
 from apps.common.constants import RoleType
@@ -47,7 +49,7 @@ def is_internal_staff(user) -> bool:
 
 class RoleRequiredMixin(UserPassesTestMixin):
     allowed_roles: tuple[str, ...] = tuple()
-    raise_exception = True
+    raise_exception = False
 
     def test_func(self):
         user = self.request.user
@@ -62,3 +64,12 @@ class RoleRequiredMixin(UserPassesTestMixin):
             role__in=self.allowed_roles,
             is_active=True,
         ).exists()
+
+    def handle_no_permission(self):
+        if not self.request.user.is_authenticated:
+            return redirect_to_login(
+                self.request.get_full_path(),
+                self.get_login_url(),
+                self.get_redirect_field_name(),
+            )
+        raise PermissionDenied(self.get_permission_denied_message())

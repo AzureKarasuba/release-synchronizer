@@ -9,8 +9,9 @@ from django.utils import timezone
 from apps.accounts.services import assign_role
 from apps.approvals.models import CostApproval, CostApprovalStatus
 from apps.common.constants import RoleType
-from apps.integrations.models import ADOSprintSnapshot
-from apps.mappings.models import ReleaseSprintMapping
+from apps.integrations.models import ADOSprintSnapshot, ADOUserStory
+from apps.integrations.services import ensure_auto_release_for_sprint
+from apps.mappings.models import ManualAssignmentMode, ManualTicketAssignment, ReleaseSprintMapping
 from apps.mismatch.services import scan_release_item_mismatches
 from apps.releases.models import ReleaseItem, ReleasePlan, ReleasePlanStatus
 from apps.vendor_queue.models import VendorAction, VendorActionStatus, VendorActionType
@@ -47,6 +48,7 @@ class Command(BaseCommand):
             assign_role(user=user, role=role)
             created_users[username] = user
 
+        # Existing legacy sample domain data.
         plan, _ = ReleasePlan.objects.get_or_create(
             code="REL-2026-Q2-A",
             defaults={
@@ -163,9 +165,71 @@ class Command(BaseCommand):
         scan_release_item_mismatches(item_a)
         scan_release_item_mismatches(item_b)
 
+        # New coordination-view sample data (Azure mirror + manual override + diff).
+        story_1, _ = ADOUserStory.objects.get_or_create(
+            work_item_id=10101,
+            defaults={
+                "title": "Checkout latency fix",
+                "assigned_to": "Alex Kim",
+                "state": "Active",
+                "sprint_path": "PaymentsCore\\ReleaseTrain\\Sprint 50.1",
+                "sprint_name": "Sprint 50.1",
+                "target_date": date.today() + timedelta(days=12),
+                "changed_date": timezone.now() - timedelta(hours=2),
+                "azure_url": "",
+                "cost_approved": True,
+                "cost_approved_at": timezone.now() - timedelta(days=1),
+                "is_active": True,
+                "last_synced_at": timezone.now(),
+                "raw_fields": {},
+            },
+        )
+
+        story_2, _ = ADOUserStory.objects.get_or_create(
+            work_item_id=10102,
+            defaults={
+                "title": "Promo rule refinement",
+                "assigned_to": "Mina Park",
+                "state": "New",
+                "sprint_path": "PaymentsCore\\ReleaseTrain\\Sprint 50.2",
+                "sprint_name": "Sprint 50.2",
+                "target_date": date.today() + timedelta(days=20),
+                "changed_date": timezone.now() - timedelta(hours=1),
+                "azure_url": "",
+                "cost_approved": False,
+                "cost_approved_at": None,
+                "is_active": True,
+                "last_synced_at": timezone.now(),
+                "raw_fields": {},
+            },
+        )
+
+        auto_release_1 = ensure_auto_release_for_sprint(sprint_path=story_1.sprint_path, sprint_name=story_1.sprint_name)
+        auto_release_2 = ensure_auto_release_for_sprint(sprint_path=story_2.sprint_path, sprint_name=story_2.sprint_name)
+
+        manual_release, _ = ReleasePlan.objects.get_or_create(
+            code="REL-BIZ-2026-05",
+            defaults={
+                "name": "Business Release May",
+                "description": "Manually curated business release bucket for board planning.",
+                "business_unit": "Payments",
+                "status": ReleasePlanStatus.ACTIVE,
+                "is_auto_generated": False,
+                "default_azure_iteration_path": auto_release_2.default_azure_iteration_path,
+            },
+        )
+
+        assignment, _ = ManualTicketAssignment.objects.get_or_create(work_item=story_2)
+        assignment.assignment_mode = ManualAssignmentMode.MANUAL
+        assignment.release_plan = manual_release
+        assignment.override_reason = "Business release is decoupled from sprint boundary"
+        assignment.updated_by = created_users["rm_demo"]
+        assignment.save()
+
         self.stdout.write(self.style.SUCCESS("Demo data seeded."))
         self.stdout.write("Demo users:")
         for username, role in users.items():
             self.stdout.write(f"- {username} ({role})")
         self.stdout.write(f"Default password: {password}")
         self.stdout.write(f"Created/updated vendor action id: {vendor_action.id}")
+        self.stdout.write(f"Azure mirror sample stories: {story_1.work_item_id}, {story_2.work_item_id}")
