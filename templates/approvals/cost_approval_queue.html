@@ -1,0 +1,22 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<h2>Cost Approval Queue</h2>
+<table>
+  <thead>
+    <tr><th>Release Item</th><th>Status</th><th>Approver</th><th>Approval Date</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+  {% for approval in approvals %}
+    <tr>
+      <td><a href="/approvals/{{ approval.id }}/">{{ approval.release_item }}</a></td>
+      <td>{{ approval.status }}</td>
+      <td>{{ approval.approver }}</td>
+      <td>{{ approval.approval_date }}</td>
+      <td>{{ approval.notes|truncatechars:100 }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="5">No approvals yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

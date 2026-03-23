@@ -1,0 +1,22 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<h2>Vendor Action Queue</h2>
+<table>
+  <thead>
+    <tr><th>Vendor</th><th>Action</th><th>Status</th><th>Due Date</th><th>Release Item</th></tr>
+  </thead>
+  <tbody>
+  {% for action in vendor_actions %}
+    <tr>
+      <td><a href="/vendor-actions/{{ action.id }}/">{{ action.vendor_name }}</a></td>
+      <td>{{ action.action_type }}</td>
+      <td>{{ action.status }}</td>
+      <td>{{ action.due_date }}</td>
+      <td>{{ action.release_item }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="5">No vendor actions yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

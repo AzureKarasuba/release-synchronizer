@@ -1,0 +1,9 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Dashboard</h2>
+  <p>Release Plans: {{ release_plan_count }}</p>
+  <p>Release Items: {{ release_item_count }}</p>
+  <p>Blocked Items: {{ blocked_items_count }}</p>
+</div>
+{% endblock %}

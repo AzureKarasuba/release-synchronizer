@@ -1,0 +1,36 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>{{ release_plan.code }} - {{ release_plan.name }}</h2>
+  <p>Status: {{ release_plan.status }}</p>
+  <p>Business Unit: {{ release_plan.business_unit }}</p>
+  <p>{{ release_plan.description }}</p>
+  <p>
+    {% if can_edit_items %}
+      <a href="/release-plans/{{ release_plan.id }}/items/new/">Add release item</a>
+    {% endif %}
+    {% if can_edit_plan %}
+      {% if can_edit_items %}|{% endif %}
+      <a href="/release-plans/{{ release_plan.id }}/edit/">Edit release plan</a>
+    {% endif %}
+  </p>
+</div>
+<h3>Items</h3>
+<table>
+  <thead>
+    <tr><th>Title</th><th>Status</th><th>Target Date</th><th>Override</th></tr>
+  </thead>
+  <tbody>
+  {% for item in release_plan.items.all %}
+    <tr>
+      <td><a href="/release-items/{{ item.id }}/">{{ item.title }}</a></td>
+      <td>{{ item.status }}</td>
+      <td>{{ item.target_release_date }}</td>
+      <td>{{ item.manual_override }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="4">No release items yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

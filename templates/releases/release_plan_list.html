@@ -1,0 +1,24 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<h2>Release Plans</h2>
+{% if can_create_plan %}
+  <p><a href="/release-plans/new/">Create release plan</a></p>
+{% endif %}
+<table>
+  <thead>
+    <tr><th>Code</th><th>Name</th><th>Status</th><th>Business Unit</th></tr>
+  </thead>
+  <tbody>
+  {% for plan in release_plans %}
+    <tr>
+      <td><a href="/release-plans/{{ plan.id }}/">{{ plan.code }}</a></td>
+      <td>{{ plan.name }}</td>
+      <td>{{ plan.status }}</td>
+      <td>{{ plan.business_unit }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="4">No release plans yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

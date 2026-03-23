@@ -1,0 +1,21 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Mismatch: {{ finding.finding_type }}</h2>
+  <p>Severity: {{ finding.severity }}</p>
+  <p>Status: {{ finding.status }}</p>
+  <p>Release Item: {{ finding.release_item }}</p>
+  <p>Detected At: {{ finding.detected_at }}</p>
+  <p>Details: {{ finding.details }}</p>
+  <p>Resolution Note: {{ finding.resolution_note }}</p>
+</div>
+
+<div class="card">
+  <h3>Triage</h3>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Update finding</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,21 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Vendor Action: {{ vendor_action.vendor_name }}</h2>
+  <p>Release Item: {{ vendor_action.release_item }}</p>
+  <p>Action Type: {{ vendor_action.action_type }}</p>
+  <p>Status: {{ vendor_action.status }}</p>
+  <p>Due Date: {{ vendor_action.due_date }}</p>
+  <p>Last Vendor Update: {{ vendor_action.last_vendor_update_at }}</p>
+  <p>Notes: {{ vendor_action.notes }}</p>
+</div>
+
+<div class="card">
+  <h3>Update Status</h3>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save update</button>
+  </form>
+</div>
+{% endblock %}

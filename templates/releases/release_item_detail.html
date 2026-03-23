@@ -1,0 +1,40 @@
+﻿{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>{{ release_item.title }}</h2>
+  <p>Status: {{ release_item.status }}</p>
+  <p>Plan: <a href="/release-plans/{{ release_item.release_plan.id }}/">{{ release_item.release_plan.code }}</a></p>
+  <p>Target Release Date: {{ release_item.target_release_date }}</p>
+  {% if can_view_cost %}
+    <p>Cost Estimate: {{ release_item.cost_estimate }} {{ release_item.currency }}</p>
+  {% else %}
+    <p>Cost Estimate: restricted</p>
+  {% endif %}
+  <p>Manual Override: {{ release_item.manual_override }}</p>
+  <p>Override Reason: {{ release_item.override_reason }}</p>
+  {% if can_edit_release_item %}
+    <p><a href="/release-items/{{ release_item.id }}/edit/">Edit release item</a></p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>Audit Timeline</h3>
+  <table>
+    <thead>
+      <tr><th>When</th><th>Action</th><th>Actor</th><th>Reason</th></tr>
+    </thead>
+    <tbody>
+    {% for event in audit_events %}
+      <tr>
+        <td>{{ event.created_at }}</td>
+        <td>{{ event.action }}</td>
+        <td>{{ event.actor }}</td>
+        <td>{{ event.change_reason }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4">No audit events yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
