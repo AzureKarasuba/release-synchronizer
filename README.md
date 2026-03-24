@@ -1,4 +1,4 @@
-﻿# Release Synchronizer
+# Release Synchronizer
 
 Production-style internal coordination prototype for release planning on top of Azure DevOps.
 
@@ -6,11 +6,11 @@ Production-style internal coordination prototype for release planning on top of 
 The app now centers on three views:
 1. **Azure Mirror** (`/`): strict source-aligned view grouped by Azure sprint.
 2. **Manual Plan** (`/manual/`): release-based planning board with drag-and-drop reassignment.
-3. **Diff & Apply** (`/diff/`): compare Azure vs manual placement and choose reset/apply actions.
+3. **Diff View** (`/diff/`): compare Azure vs manual placement and optionally reset local assignment to Azure default.
 
 ## What Sync Does
 - Pulls **Azure iterations (sprints)**.
-- Pulls **Azure User Story work items**.
+- Pulls **Azure User Story work items** (including parent feature metadata when available).
 - Upserts ticket fields: ID, title, assignee, state, sprint, target date.
 - Auto-creates release buckets from sprint structure (default behavior).
 
@@ -74,4 +74,5 @@ python manage.py sync_ado --force
 - `exec_demo` (executive viewer)
 
 Default password: `ChangeMe123!` (override with `--password`).
+
 

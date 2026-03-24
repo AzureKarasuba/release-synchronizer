@@ -1,4 +1,4 @@
-﻿from django.conf import settings
+from django.conf import settings
 from django.db import models
 
 from apps.common.models import TimeStampedModel
@@ -39,11 +39,15 @@ class IntegrationSyncState(models.Model):
 class ADOUserStory(TimeStampedModel):
     work_item_id = models.BigIntegerField(unique=True)
     title = models.CharField(max_length=255)
+    parent_work_item_id = models.BigIntegerField(null=True, blank=True)
+    parent_title = models.CharField(max_length=255, blank=True)
+    parent_work_item_type = models.CharField(max_length=80, blank=True)
     assigned_to = models.CharField(max_length=200, blank=True)
     state = models.CharField(max_length=80, blank=True)
     sprint_path = models.CharField(max_length=255, blank=True)
     sprint_name = models.CharField(max_length=200, blank=True)
     target_date = models.DateField(null=True, blank=True)
+    story_points = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     changed_date = models.DateTimeField(null=True, blank=True)
     azure_url = models.URLField(blank=True)
 
@@ -60,6 +64,7 @@ class ADOUserStory(TimeStampedModel):
         indexes = [
             models.Index(fields=["is_active", "sprint_name"]),
             models.Index(fields=["work_item_id"]),
+            models.Index(fields=["parent_work_item_id"]),
             models.Index(fields=["state"]),
         ]
 
@@ -86,3 +91,4 @@ class AzureWritebackRequest(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.work_item_id} -> {self.target_iteration_path} ({self.status})"
+

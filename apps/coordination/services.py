@@ -1,4 +1,6 @@
-﻿from django.db import transaction
+from collections import OrderedDict
+
+from django.db import transaction
 
 from apps.audit.services import create_audit_event
 from apps.integrations.models import ADOUserStory
@@ -16,6 +18,33 @@ def get_effective_release_for_story(story: ADOUserStory) -> ReleasePlan:
     if assignment and assignment.assignment_mode == ManualAssignmentMode.MANUAL and assignment.release_plan_id:
         return assignment.release_plan
     return get_default_release_for_story(story)
+
+
+def build_story_hierarchy_blocks(stories):
+    grouped = OrderedDict()
+
+    for story in stories:
+        parent_id = story.parent_work_item_id
+        if parent_id:
+            key = f"parent-{parent_id}"
+            if key not in grouped:
+                grouped[key] = {
+                    "parent": {
+                        "work_item_id": parent_id,
+                        "title": story.parent_title or "(Untitled Parent)",
+                        "type": story.parent_work_item_type or "Parent",
+                    },
+                    "stories": [],
+                }
+            grouped[key]["stories"].append(story)
+        else:
+            key = f"story-{story.id}"
+            grouped[key] = {
+                "parent": None,
+                "stories": [story],
+            }
+
+    return list(grouped.values())
 
 
 @transaction.atomic

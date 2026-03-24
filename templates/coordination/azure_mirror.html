@@ -1,58 +1,93 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card">
-  <h2>Azure Mirror (Read-only Source View)</h2>
-  <p>This view strictly follows Azure DevOps sprint categorization and refreshes from sync.</p>
-  <p>
+  <h2>Azure Mirror</h2>
+  <p>Read-only source view grouped by Azure sprint and refreshed from sync.</p>
+  <div class="meta">
     {% if sync_state %}
-      Last synced: {{ sync_state.last_synced_at }} ({{ sync_state.last_status }})
+      <span class="chip">Last synced: <span class="mono">{{ sync_state.last_synced_at }}</span></span>
+      <span class="chip {% if sync_state.last_status == 'ok' %}success{% elif sync_state.last_status == 'error' %}danger{% else %}warning{% endif %}">Status: {{ sync_state.last_status }}</span>
     {% else %}
-      Last synced: never
+      <span class="chip warning">Last synced: never</span>
     {% endif %}
-  </p>
+
+    {% if can_trigger_sync %}
+      <a class="btn" href="{% url 'azure-mirror' %}?sync=1">Run Sync</a>
+    {% endif %}
+    <a class="btn" href="{% url 'azure-mirror' %}?export=csv">Export CSV</a>
+  </div>
+
   {% if sync_state and sync_state.last_error %}
-    <p style="color: #b00020;"><strong>Last sync error:</strong> {{ sync_state.last_error }}</p>
+    <div class="meta" style="margin-top:8px;">
+      <span class="chip danger">Last sync error: {{ sync_state.last_error }}</span>
+    </div>
   {% endif %}
-  {% if can_trigger_sync %}
-    <p><a href="/?sync=1">Run Sync Now</a></p>
-  {% endif %}
-  <p style="font-size: 0.9rem; color: #555;">If you seeded demo data, sample tickets remain visible until a successful Azure sync refreshes stories.</p>
 </div>
 
-{% for sprint, stories in stories_by_sprint.items %}
-  <div class="card">
-    <h3>{{ sprint }} ({{ stories|length }})</h3>
+{% for sprint, bucket in stories_by_sprint.items %}
+  <div class="table-block">
+    <h3>{{ sprint }} ({{ bucket.count }})</h3>
+    <div class="meta" style="margin-top:2px; margin-bottom:6px;">
+      {% if bucket.span and bucket.span.start_date and bucket.span.end_date %}
+        <span class="chip">Sprint Span: <span class="mono">{{ bucket.span.start_date }}</span> to <span class="mono">{{ bucket.span.end_date }}</span></span>
+      {% elif bucket.span and bucket.span.end_date %}
+        <span class="chip">Sprint End: <span class="mono">{{ bucket.span.end_date }}</span></span>
+      {% else %}
+        <span class="chip warning">Sprint Span: unavailable</span>
+      {% endif %}
+    </div>
+
     <table>
       <thead>
         <tr>
           <th>Ticket ID</th>
           <th>Title</th>
+          <th>Story Points</th>
           <th>Assigned To</th>
-          <th>Current State</th>
+          <th>State</th>
           <th>Sprint</th>
           <th>Target Date</th>
-          <th>Cost Approved?</th>
-          <th>Cost Approved When</th>
+          <th>Cost Approval</th>
+          <th>Approved At</th>
         </tr>
       </thead>
       <tbody>
-      {% for story in stories %}
-        <tr>
-          <td>#{{ story.work_item_id }}</td>
-          <td>
-            {% if story.azure_url %}
-              <a href="{{ story.azure_url }}" target="_blank" rel="noreferrer">{{ story.title }}</a>
-            {% else %}
-              {{ story.title }}
-            {% endif %}
-          </td>
-          <td>{{ story.assigned_to }}</td>
-          <td>{{ story.state }}</td>
-          <td>{{ story.sprint_name }}</td>
-          <td>{{ story.target_date }}</td>
-          <td>{{ story.cost_approved }}</td>
-          <td>{{ story.cost_approved_at }}</td>
-        </tr>
+      {% for block in bucket.blocks %}
+        {% if block.parent %}
+          <tr class="parent-row">
+            <td>#{{ block.parent.work_item_id }}</td>
+            <td colspan="8">{{ block.parent.type }}: {{ block.parent.title }}</td>
+          </tr>
+        {% endif %}
+
+        {% for story in block.stories %}
+          <tr>
+            <td class="mono">#{{ story.work_item_id }}</td>
+            <td>
+              {% if block.parent %}
+                <span class="muted">-&gt;&nbsp;</span>
+              {% endif %}
+              {% if story.display_url %}
+                <a href="{{ story.display_url }}" target="_blank" rel="noreferrer">{{ story.title }}</a>
+              {% else %}
+                {{ story.title }}
+              {% endif %}
+            </td>
+            <td class="mono">{{ story.story_points|default:"-" }}</td>
+            <td>{{ story.assigned_to|default:"-" }}</td>
+            <td>{{ story.state|default:"-" }}</td>
+            <td>{{ story.sprint_name|default:"-" }}</td>
+            <td class="mono">{{ story.target_date|default:"-" }}</td>
+            <td>
+              {% if story.cost_approved %}
+                <span class="chip success">Approved</span>
+              {% else %}
+                <span class="chip warning">Pending</span>
+              {% endif %}
+            </td>
+            <td class="mono">{{ story.cost_approved_at|default:"-" }}</td>
+          </tr>
+        {% endfor %}
       {% endfor %}
       </tbody>
     </table>
@@ -61,4 +96,3 @@
   <div class="card">No Azure tickets have been synced yet.</div>
 {% endfor %}
 {% endblock %}
-

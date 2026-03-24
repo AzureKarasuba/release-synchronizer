@@ -1,4 +1,4 @@
-﻿import base64
+import base64
 import json
 import re
 import urllib.parse
@@ -7,12 +7,13 @@ import uuid
 import zlib
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from apps.integrations.models import ADOSprintSnapshot, ADOUserStory, AzureWritebackRequest, IntegrationSyncState
+from apps.integrations.models import ADOSprintSnapshot, ADOUserStory, IntegrationSyncState
 from apps.releases.models import ReleasePlan, ReleasePlanStatus
 
 
@@ -69,7 +70,7 @@ def sync_ado_sprints(*, force: bool = False) -> SyncResult:
                 source_project=project,
                 imported_count=0,
                 batch_id=str(state.last_batch_id) if state.last_batch_id else None,
-                last_synced_at=state.last_synced_at.isoformat(),
+                last_synced_at=_to_local_iso(state.last_synced_at),
                 message="Sprint sync skipped: interval not elapsed.",
             )
 
@@ -85,7 +86,7 @@ def sync_ado_sprints(*, force: bool = False) -> SyncResult:
                 source_project=project,
                 imported_count=0,
                 batch_id=None,
-                last_synced_at=now.isoformat(),
+                last_synced_at=_to_local_iso(now),
                 message="Sprint sync complete: no iterations returned.",
             )
 
@@ -103,7 +104,7 @@ def sync_ado_sprints(*, force: bool = False) -> SyncResult:
             source_project=project,
             imported_count=imported_count,
             batch_id=str(batch_id),
-            last_synced_at=state.last_synced_at.isoformat() if state.last_synced_at else None,
+            last_synced_at=_to_local_iso(state.last_synced_at),
             message="Sprint sync complete.",
         )
     except Exception as exc:  # noqa: BLE001
@@ -116,7 +117,7 @@ def sync_ado_sprints(*, force: bool = False) -> SyncResult:
             source_project=project,
             imported_count=0,
             batch_id=None,
-            last_synced_at=state.last_synced_at.isoformat() if state.last_synced_at else None,
+            last_synced_at=_to_local_iso(state.last_synced_at),
             message=f"Sprint sync failed: {exc}",
         )
 
@@ -148,7 +149,7 @@ def sync_ado_user_stories(*, force: bool = False) -> SyncResult:
                 source_project=project,
                 imported_count=0,
                 batch_id=str(state.last_batch_id) if state.last_batch_id else None,
-                last_synced_at=state.last_synced_at.isoformat(),
+                last_synced_at=_to_local_iso(state.last_synced_at),
                 message="Story sync skipped: interval not elapsed.",
             )
 
@@ -156,9 +157,10 @@ def sync_ado_user_stories(*, force: bool = False) -> SyncResult:
         work_item_types = _ado_work_item_types()
         ids = _fetch_story_ids(org=org, project=project, pat=pat, work_item_types=work_item_types)
         stories = _fetch_work_items_batch(org=org, project=project, pat=pat, ids=ids) if ids else []
+        parent_lookup = _build_parent_lookup(stories=stories, org=org, project=project, pat=pat)
 
         batch_id = uuid.uuid4()
-        imported_count = _persist_story_snapshot(stories=stories, synced_at=now)
+        imported_count = _persist_story_snapshot(stories=stories, parent_lookup=parent_lookup, synced_at=now)
 
         state.last_status = "ok"
         state.last_error = ""
@@ -171,7 +173,7 @@ def sync_ado_user_stories(*, force: bool = False) -> SyncResult:
             source_project=project,
             imported_count=imported_count,
             batch_id=str(batch_id),
-            last_synced_at=state.last_synced_at.isoformat() if state.last_synced_at else None,
+            last_synced_at=_to_local_iso(state.last_synced_at),
             message="Story sync complete.",
         )
     except Exception as exc:  # noqa: BLE001
@@ -184,10 +186,17 @@ def sync_ado_user_stories(*, force: bool = False) -> SyncResult:
             source_project=project,
             imported_count=0,
             batch_id=None,
-            last_synced_at=state.last_synced_at.isoformat() if state.last_synced_at else None,
+            last_synced_at=_to_local_iso(state.last_synced_at),
             message=f"Story sync failed: {exc}",
         )
 
+
+def _to_local_iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if timezone.is_naive(value):
+        return value.isoformat()
+    return timezone.localtime(value).isoformat(timespec="seconds")
 
 def get_story_sync_state() -> IntegrationSyncState | None:
     org = getattr(settings, "ADO_ORGANIZATION", "").strip()
@@ -195,46 +204,6 @@ def get_story_sync_state() -> IntegrationSyncState | None:
     if not org or not project:
         return None
     return IntegrationSyncState.objects.filter(key=f"ado-stories:{org}:{project}").first()
-
-
-def apply_story_to_azure_iteration(*, story: ADOUserStory, target_iteration_path: str, actor=None) -> AzureWritebackRequest:
-    request_row = AzureWritebackRequest.objects.create(
-        work_item=story,
-        target_iteration_path=target_iteration_path,
-        status=AzureWritebackRequest.Status.PENDING,
-        requested_by=actor if getattr(actor, "is_authenticated", False) else None,
-    )
-
-    org = getattr(settings, "ADO_ORGANIZATION", "").strip()
-    project = getattr(settings, "ADO_PROJECT", "").strip()
-    pat = getattr(settings, "ADO_PAT", "").strip()
-
-    if not org or not project or not pat:
-        request_row.status = AzureWritebackRequest.Status.FAILED
-        request_row.error_message = "Missing ADO credentials in settings."
-        request_row.processed_at = timezone.now()
-        request_row.save(update_fields=["status", "error_message", "processed_at", "updated_at"])
-        return request_row
-
-    try:
-        _patch_story_iteration(
-            org=org,
-            project=project,
-            pat=pat,
-            work_item_id=story.work_item_id,
-            iteration_path=target_iteration_path,
-        )
-        request_row.status = AzureWritebackRequest.Status.APPLIED
-        request_row.error_message = ""
-        request_row.processed_at = timezone.now()
-        request_row.save(update_fields=["status", "error_message", "processed_at", "updated_at"])
-    except Exception as exc:  # noqa: BLE001
-        request_row.status = AzureWritebackRequest.Status.FAILED
-        request_row.error_message = str(exc)
-        request_row.processed_at = timezone.now()
-        request_row.save(update_fields=["status", "error_message", "processed_at", "updated_at"])
-
-    return request_row
 
 
 def _ado_work_item_types() -> list[str]:
@@ -284,7 +253,7 @@ def _fetch_story_ids(*, org: str, project: str, pat: str, work_item_types: list[
     return [int(row["id"]) for row in work_items if row.get("id")]
 
 
-def _fetch_work_items_batch(*, org: str, project: str, pat: str, ids: list[int]) -> list[dict]:
+def _fetch_work_items_batch(*, org: str, project: str, pat: str, ids: list[int], fields: list[str] | None = None) -> list[dict]:
     if not ids:
         return []
 
@@ -292,15 +261,20 @@ def _fetch_work_items_batch(*, org: str, project: str, pat: str, ids: list[int])
     project_encoded = urllib.parse.quote(project)
     url = f"https://dev.azure.com/{org_encoded}/{project_encoded}/_apis/wit/workitemsbatch?api-version=7.1-preview.1"
 
-    fields = [
-        "System.Id",
-        "System.Title",
-        "System.AssignedTo",
-        "System.State",
-        "System.IterationPath",
-        "System.ChangedDate",
-        "Microsoft.VSTS.Scheduling.TargetDate",
-    ]
+    if fields is None:
+        fields = [
+            "System.Id",
+            "System.Title",
+            "System.Parent",
+            "System.AssignedTo",
+            "System.State",
+            "System.IterationPath",
+            "System.ChangedDate",
+            "Microsoft.VSTS.Scheduling.TargetDate",
+            "Microsoft.VSTS.Scheduling.StoryPoints",
+            "Microsoft.VSTS.Scheduling.Effort",
+            "Microsoft.VSTS.Scheduling.Size",
+        ]
 
     rows: list[dict] = []
     chunk_size = 200
@@ -313,25 +287,35 @@ def _fetch_work_items_batch(*, org: str, project: str, pat: str, ids: list[int])
     return rows
 
 
-def _patch_story_iteration(*, org: str, project: str, pat: str, work_item_id: int, iteration_path: str):
-    org_encoded = urllib.parse.quote(org)
-    project_encoded = urllib.parse.quote(project)
-    url = (
-        f"https://dev.azure.com/{org_encoded}/{project_encoded}"
-        f"/_apis/wit/workitems/{work_item_id}?api-version=7.1-preview.3"
+def _build_parent_lookup(*, stories: list[dict], org: str, project: str, pat: str) -> dict[int, dict]:
+    parent_ids = {
+        parent_id
+        for row in stories
+        for parent_id in [_safe_int((row.get("fields") or {}).get("System.Parent"))]
+        if parent_id is not None
+    }
+    if not parent_ids:
+        return {}
+
+    parent_rows = _fetch_work_items_batch(
+        org=org,
+        project=project,
+        pat=pat,
+        ids=sorted(parent_ids),
+        fields=["System.Id", "System.Title", "System.WorkItemType"],
     )
 
-    token = base64.b64encode(f":{pat}".encode("utf-8")).decode("ascii")
-    body = [{"op": "add", "path": "/fields/System.IterationPath", "value": iteration_path}]
-    data = json.dumps(body).encode("utf-8")
-
-    request = urllib.request.Request(url, data=data, method="PATCH")
-    request.add_header("Authorization", f"Basic {token}")
-    request.add_header("Accept", "application/json")
-    request.add_header("Content-Type", "application/json-patch+json")
-
-    with urllib.request.urlopen(request, timeout=30):
-        return
+    lookup: dict[int, dict] = {}
+    for row in parent_rows:
+        fields = row.get("fields") or {}
+        parent_id = _safe_int(fields.get("System.Id") or row.get("id"))
+        if parent_id is None:
+            continue
+        lookup[parent_id] = {
+            "title": str(fields.get("System.Title") or ""),
+            "work_item_type": str(fields.get("System.WorkItemType") or ""),
+        }
+    return lookup
 
 
 def _request_json(*, url: str, pat: str, method: str = "GET", body: dict | None = None) -> dict:
@@ -414,6 +398,30 @@ def _extract_sprint_name(sprint_path: str) -> str:
     return sprint_path.split("\\")[-1]
 
 
+
+def _extract_story_points(fields: dict) -> Decimal | None:
+    for key in (
+        "Microsoft.VSTS.Scheduling.StoryPoints",
+        "Microsoft.VSTS.Scheduling.Effort",
+        "Microsoft.VSTS.Scheduling.Size",
+    ):
+        value = fields.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, ValueError, TypeError):
+            continue
+    return None
+def _safe_int(value) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _normalize_release_code_from_sprint(sprint_path: str) -> str:
     if not sprint_path:
         sprint_path = "UNASSIGNED"
@@ -440,7 +448,7 @@ def _persist_iteration_snapshot(*, project: str, iterations: list[dict], batch_i
 
 
 @transaction.atomic
-def _persist_story_snapshot(*, stories: list[dict], synced_at) -> int:
+def _persist_story_snapshot(*, stories: list[dict], parent_lookup: dict[int, dict], synced_at) -> int:
     seen_ids: set[int] = set()
     imported = 0
 
@@ -449,11 +457,16 @@ def _persist_story_snapshot(*, stories: list[dict], synced_at) -> int:
         fields = row.get("fields") or {}
 
         title = str(fields.get("System.Title") or "")
+        parent_work_item_id = _safe_int(fields.get("System.Parent"))
+        parent_info = parent_lookup.get(parent_work_item_id or -1, {})
+        parent_title = str(parent_info.get("title") or "")
+        parent_work_item_type = str(parent_info.get("work_item_type") or "")
         assigned_to = _extract_assigned_to(fields.get("System.AssignedTo"))
         state = str(fields.get("System.State") or "")
         sprint_path = str(fields.get("System.IterationPath") or "")
         sprint_name = _extract_sprint_name(sprint_path)
         target_date = _parse_iso_date(fields.get("Microsoft.VSTS.Scheduling.TargetDate"))
+        story_points = _extract_story_points(fields)
         changed_date = _parse_iso_datetime(fields.get("System.ChangedDate"))
         azure_url = str((((row.get("_links") or {}).get("html") or {}).get("href") or ""))
 
@@ -461,11 +474,15 @@ def _persist_story_snapshot(*, stories: list[dict], synced_at) -> int:
             work_item_id=work_item_id,
             defaults={
                 "title": title,
+                "parent_work_item_id": parent_work_item_id,
+                "parent_title": parent_title,
+                "parent_work_item_type": parent_work_item_type,
                 "assigned_to": assigned_to,
                 "state": state,
                 "sprint_path": sprint_path,
                 "sprint_name": sprint_name,
                 "target_date": target_date,
+                "story_points": story_points,
                 "changed_date": changed_date,
                 "azure_url": azure_url,
                 "is_active": True,
@@ -476,11 +493,15 @@ def _persist_story_snapshot(*, stories: list[dict], synced_at) -> int:
 
         if not created:
             story.title = title
+            story.parent_work_item_id = parent_work_item_id
+            story.parent_title = parent_title
+            story.parent_work_item_type = parent_work_item_type
             story.assigned_to = assigned_to
             story.state = state
             story.sprint_path = sprint_path
             story.sprint_name = sprint_name
             story.target_date = target_date
+            story.story_points = story_points
             story.changed_date = changed_date
             story.azure_url = azure_url
             story.is_active = True
@@ -489,11 +510,15 @@ def _persist_story_snapshot(*, stories: list[dict], synced_at) -> int:
             story.save(
                 update_fields=[
                     "title",
+                    "parent_work_item_id",
+                    "parent_title",
+                    "parent_work_item_type",
                     "assigned_to",
                     "state",
                     "sprint_path",
                     "sprint_name",
                     "target_date",
+                    "story_points",
                     "changed_date",
                     "azure_url",
                     "is_active",
@@ -549,3 +574,7 @@ def ensure_auto_release_for_sprint(*, sprint_path: str, sprint_name: str) -> Rel
 def compact_release_code_hint(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9]+", "-", value).strip("-").upper()
     return cleaned[:32] if cleaned else "RELEASE"
+
+
+
+

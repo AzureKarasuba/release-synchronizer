@@ -1,4 +1,4 @@
-﻿from datetime import date, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -170,6 +170,10 @@ class Command(BaseCommand):
             work_item_id=10101,
             defaults={
                 "title": "Checkout latency fix",
+                "parent_work_item_id": 9001,
+                "parent_title": "Checkout Platform Stabilization",
+                "parent_work_item_type": "Feature",
+                "story_points": "5",
                 "assigned_to": "Alex Kim",
                 "state": "Active",
                 "sprint_path": "PaymentsCore\\ReleaseTrain\\Sprint 50.1",
@@ -189,6 +193,10 @@ class Command(BaseCommand):
             work_item_id=10102,
             defaults={
                 "title": "Promo rule refinement",
+                "parent_work_item_id": 9001,
+                "parent_title": "Checkout Platform Stabilization",
+                "parent_work_item_type": "Feature",
+                "story_points": "3",
                 "assigned_to": "Mina Park",
                 "state": "New",
                 "sprint_path": "PaymentsCore\\ReleaseTrain\\Sprint 50.2",
@@ -233,3 +241,4 @@ class Command(BaseCommand):
         self.stdout.write(f"Default password: {password}")
         self.stdout.write(f"Created/updated vendor action id: {vendor_action.id}")
         self.stdout.write(f"Azure mirror sample stories: {story_1.work_item_id}, {story_2.work_item_id}")
+

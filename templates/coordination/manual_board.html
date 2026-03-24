@@ -1,90 +1,336 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block content %}
+<style>
+  .release-dropzone {
+    transition: box-shadow 0.12s ease, border-color 0.12s ease;
+  }
+
+  .release-dropzone.release-drop-hover {
+    border-color: #111;
+    box-shadow: inset 0 0 0 2px rgba(17, 17, 17, 0.2);
+  }
+
+  .story-row {
+    cursor: grab;
+    user-select: none;
+  }
+
+  .story-row.story-selected td {
+    background: #dedbd5;
+    border-color: #c8c3bb;
+  }
+
+  .story-row.story-dragging {
+    opacity: 0.55;
+  }
+
+  .selection-chip {
+    min-width: 110px;
+    justify-content: center;
+  }
+</style>
+
 <div class="card">
-  <h2>Manual Release Plan (Drag & Drop)</h2>
-  <p>Default grouping follows Azure sprint alignment; drag tickets across release columns to override for business planning.</p>
+  <h2>Manual Release Plan</h2>
+  <p>Mirror-style stacked sections by release for better scalability across many releases.</p>
+  <div class="meta">
+    <span class="chip">Layout: vertical grouped tables</span>
+    {% if can_edit %}
+      <span class="chip success">Drag & Drop enabled</span>
+      <span id="dnd-selection-status" class="chip selection-chip">0 selected</span>
+      <span id="dnd-hint" class="chip">Ctrl/Cmd + click to multi-select, then drag to target release.</span>
+    {% else %}
+      <span class="chip warning">View only</span>
+    {% endif %}
+    <a class="btn" href="{% url 'manual-board' %}?export=csv">Export CSV</a>
+  </div>
 </div>
 
+{% if can_edit %}
+  <div class="card">
+    <h3>Add Release</h3>
+    <p>Create a manual release bucket that is independent from Azure sprint auto-mapping.</p>
+    <form method="post" action="{% url 'manual-create-release' %}" style="display:flex; gap:8px; align-items:center; flex-wrap: wrap;">
+      {% csrf_token %}
+      <label class="muted" for="new-release-name">Name</label>
+      <input id="new-release-name" name="name" type="text" placeholder="Release 5" maxlength="200" />
+      <label class="muted" for="new-release-date">Target Date</label>
+      <input id="new-release-date" name="target_end_date" type="date" />
+      <button type="submit">Add Release</button>
+    </form>
+  </div>
+{% endif %}
+
 {% if release_groups %}
-<div class="board" id="release-board">
   {% for group in release_groups %}
-    <section class="release-column">
-      <h3>{{ group.release.name }}</h3>
-      <p><small>{{ group.release.code }}</small></p>
-      <div class="dropzone" data-release-id="{{ group.release.id }}">
-        {% for story in group.stories %}
-          <article class="story-card" draggable="{{ can_edit|yesno:'true,false' }}" data-story-id="{{ story.id }}">
-            <div><strong>#{{ story.work_item_id }}</strong> {{ story.title }}</div>
-            <div><small>{{ story.assigned_to }} | {{ story.state }}</small></div>
-            <div><small>Sprint: {{ story.sprint_name }} | Target: {{ story.target_date }}</small></div>
-          </article>
-        {% endfor %}
+    <div class="table-block release-dropzone" data-release-id="{{ group.release.id }}">
+      <div class="release-title">
+        <h3>{{ group.release_label }} ({{ group.stories|length }})</h3>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span class="release-code">{{ group.release.code }}</span>
+          {% if group.release.is_auto_generated %}
+            <span class="chip">Azure default</span>
+          {% elif can_edit %}
+            <form method="post" action="{% url 'manual-delete-release' group.release.id %}" onsubmit="return confirm('Delete {{ group.release.name|escapejs }}? Tickets will reset to Azure default and linked release items will be deleted.');">
+              {% csrf_token %}
+              <button type="submit">Delete</button>
+            </form>
+          {% endif %}
+        </div>
       </div>
-    </section>
+
+      <div class="meta" style="margin-top: 0; margin-bottom: 10px;">
+        {% if can_edit %}
+          <form method="post" action="{% url 'manual-update-release-date' group.release.id %}" style="display:flex; align-items:center; gap:8px; flex-wrap: wrap;">
+            {% csrf_token %}
+            <label class="muted" for="release-date-{{ group.release.id }}">Release Date</label>
+            <input id="release-date-{{ group.release.id }}" name="target_end_date" type="date" value="{{ group.release_date_value }}" />
+            <button type="submit">Save</button>
+          </form>
+        {% else %}
+          <span class="chip">Release Date: {{ group.release.target_end_date|default:"-" }}</span>
+        {% endif %}
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Ticket ID</th>
+            <th>Title</th>
+            <th>Story Points</th>
+            <th>Assigned To</th>
+            <th>State</th>
+            <th>Source Sprint</th>
+            <th>Target Date</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for block in group.story_blocks %}
+          {% if block.parent %}
+            <tr class="parent-row">
+              <td>#{{ block.parent.work_item_id }}</td>
+              <td colspan="6">{{ block.parent.type }}: {{ block.parent.title }}</td>
+            </tr>
+          {% endif %}
+
+          {% for story in block.stories %}
+            <tr
+              class="story-row"
+              data-story-id="{{ story.id }}"
+              data-release-id="{{ group.release.id }}"
+              {% if can_edit %}draggable="true"{% endif %}
+            >
+              <td class="mono">#{{ story.work_item_id }}</td>
+              <td>
+                {% if block.parent %}
+                  <span class="muted">-&gt;&nbsp;</span>
+                {% endif %}
+                {% if story.display_url %}
+                  <a href="{{ story.display_url }}" target="_blank" rel="noreferrer">{{ story.title }}</a>
+                {% else %}
+                  {{ story.title }}
+                {% endif %}
+              </td>
+              <td class="mono">{{ story.story_points|default:"-" }}</td>
+              <td>{{ story.assigned_to|default:"-" }}</td>
+              <td>{{ story.state|default:"-" }}</td>
+              <td>{{ story.sprint_name|default:"-" }}</td>
+              <td class="mono">{{ story.target_date|default:"-" }}</td>
+            </tr>
+          {% endfor %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% endfor %}
-</div>
 {% else %}
   <div class="card">No synchronized tickets available yet. Run sync from Azure Mirror.</div>
 {% endif %}
 
+{% if can_edit %}
 <script>
-(function () {
-  const canEdit = {{ can_edit|yesno:"true,false" }};
-  if (!canEdit) return;
+  (function () {
+    const rows = Array.from(document.querySelectorAll('.story-row'));
+    const releaseZones = Array.from(document.querySelectorAll('.release-dropzone'));
+    const statusChip = document.getElementById('dnd-selection-status');
+    const hintChip = document.getElementById('dnd-hint');
+    const selectedStoryIds = new Set();
+    let isMoveInFlight = false;
 
-  let draggedStoryId = null;
+    if (!rows.length || !releaseZones.length || !statusChip) {
+      return;
+    }
 
-  document.querySelectorAll('.story-card').forEach((card) => {
-    card.addEventListener('dragstart', (e) => {
-      draggedStoryId = card.dataset.storyId;
-      e.dataTransfer.effectAllowed = 'move';
-    });
-  });
+    function updateSelectionUi() {
+      for (const row of rows) {
+        const id = row.dataset.storyId;
+        row.classList.toggle('story-selected', selectedStoryIds.has(id));
+      }
 
-  document.querySelectorAll('.dropzone').forEach((zone) => {
-    zone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      zone.classList.add('drop-hover');
-    });
+      const count = selectedStoryIds.size;
+      statusChip.textContent = `${count} selected`;
+      if (hintChip && count > 0) {
+        hintChip.textContent = 'Drag selected ticket(s) onto another release section.';
+      } else if (hintChip) {
+        hintChip.textContent = 'Ctrl/Cmd + click to multi-select, then drag to target release.';
+      }
+    }
 
-    zone.addEventListener('dragleave', () => zone.classList.remove('drop-hover'));
+    function clearSelection() {
+      selectedStoryIds.clear();
+      updateSelectionUi();
+    }
 
-    zone.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      zone.classList.remove('drop-hover');
-      const releaseId = zone.dataset.releaseId;
-      if (!draggedStoryId || !releaseId) return;
+    function rowByStoryId(storyId) {
+      return document.querySelector(`.story-row[data-story-id="${storyId}"]`);
+    }
 
-      const body = new URLSearchParams({
-        story_id: draggedStoryId,
-        release_id: releaseId,
-        reason: 'Moved via manual board drag-drop',
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) {
+        return parts.pop().split(';').shift();
+      }
+      return '';
+    }
+
+    for (const row of rows) {
+      row.addEventListener('click', function (event) {
+        if (event.target.closest('a, button, input, select, label, form')) {
+          return;
+        }
+
+        const id = row.dataset.storyId;
+        if (!id) {
+          return;
+        }
+
+        if (event.ctrlKey || event.metaKey) {
+          if (selectedStoryIds.has(id)) {
+            selectedStoryIds.delete(id);
+          } else {
+            selectedStoryIds.add(id);
+          }
+        } else {
+          selectedStoryIds.clear();
+          selectedStoryIds.add(id);
+        }
+        updateSelectionUi();
       });
 
-      const response = await fetch('{% url "manual-move-story" %}', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'X-CSRFToken': getCookie('csrftoken'),
-        },
-        body,
+      row.addEventListener('dragstart', function (event) {
+        const id = row.dataset.storyId;
+        if (!id) {
+          event.preventDefault();
+          return;
+        }
+
+        if (!selectedStoryIds.has(id)) {
+          selectedStoryIds.clear();
+          selectedStoryIds.add(id);
+          updateSelectionUi();
+        }
+
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', Array.from(selectedStoryIds).join(','));
+        row.classList.add('story-dragging');
       });
 
-      if (response.ok) {
-        window.location.reload();
-      } else {
-        alert('Move failed. Please refresh and retry.');
+      row.addEventListener('dragend', function () {
+        row.classList.remove('story-dragging');
+      });
+    }
+
+    for (const zone of releaseZones) {
+      zone.addEventListener('dragover', function (event) {
+        event.preventDefault();
+        zone.classList.add('release-drop-hover');
+      });
+
+      zone.addEventListener('dragleave', function () {
+        zone.classList.remove('release-drop-hover');
+      });
+
+      zone.addEventListener('drop', async function (event) {
+        event.preventDefault();
+        zone.classList.remove('release-drop-hover');
+
+        if (isMoveInFlight || selectedStoryIds.size === 0) {
+          return;
+        }
+
+        const targetReleaseId = zone.dataset.releaseId;
+        if (!targetReleaseId) {
+          return;
+        }
+
+        const ids = Array.from(selectedStoryIds);
+        const sameTarget = ids.every(function (storyId) {
+          const row = rowByStoryId(storyId);
+          return row && row.dataset.releaseId === targetReleaseId;
+        });
+
+        if (sameTarget) {
+          statusChip.textContent = 'Selection is already in this release';
+          return;
+        }
+
+        isMoveInFlight = true;
+        statusChip.textContent = 'Moving...';
+
+        const body = new URLSearchParams();
+        body.append('release_id', targetReleaseId);
+        body.append('reason', 'Bulk moved via drag and drop');
+        for (const id of ids) {
+          body.append('story_ids', id);
+        }
+
+        try {
+          const response = await fetch('{% url "manual-bulk-move-stories" %}', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'X-CSRFToken': getCookie('csrftoken'),
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: body.toString(),
+          });
+
+          if (!response.ok) {
+            let detail = 'Move failed';
+            try {
+              const errorPayload = await response.json();
+              if (errorPayload.detail) {
+                detail = errorPayload.detail;
+              }
+            } catch (_) {
+              // Keep default detail if JSON parse fails.
+            }
+            throw new Error(detail);
+          }
+
+          const payload = await response.json();
+          statusChip.textContent = `Moved ${payload.moved} ticket(s) to ${payload.release}`;
+          window.setTimeout(function () {
+            window.location.reload();
+          }, 220);
+        } catch (error) {
+          statusChip.textContent = error.message || 'Move failed';
+        } finally {
+          isMoveInFlight = false;
+        }
+      });
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        clearSelection();
       }
     });
-  });
 
-  function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
-    return '';
-  }
-})();
+    updateSelectionUi();
+  })();
 </script>
+{% endif %}
 {% endblock %}
+
