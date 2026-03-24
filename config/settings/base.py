@@ -1,11 +1,11 @@
-﻿import os
+import os
 from pathlib import Path
 
 import dj_database_url
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / ".env", override=True)
 
 # Keep fallback stable in local/dev to avoid invalidating sessions on each restart.
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-secret-key-change-me")
@@ -103,7 +103,12 @@ ADO_ORGANIZATION = os.getenv("ADO_ORGANIZATION", "")
 ADO_PROJECT = os.getenv("ADO_PROJECT", "")
 ADO_PAT = os.getenv("ADO_PAT", "")
 ADO_SYNC_INTERVAL_SECONDS = int(os.getenv("ADO_SYNC_INTERVAL_SECONDS", "300"))
+ADO_WORK_ITEM_TYPES = [
+    t.strip() for t in os.getenv("ADO_WORK_ITEM_TYPES", "User Story,Product Backlog Item").split(",") if t.strip()
+]
 
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
+
+

@@ -153,7 +153,8 @@ def sync_ado_user_stories(*, force: bool = False) -> SyncResult:
             )
 
     try:
-        ids = _fetch_story_ids(org=org, project=project, pat=pat)
+        work_item_types = _ado_work_item_types()
+        ids = _fetch_story_ids(org=org, project=project, pat=pat, work_item_types=work_item_types)
         stories = _fetch_work_items_batch(org=org, project=project, pat=pat, ids=ids) if ids else []
 
         batch_id = uuid.uuid4()
@@ -236,6 +237,13 @@ def apply_story_to_azure_iteration(*, story: ADOUserStory, target_iteration_path
     return request_row
 
 
+def _ado_work_item_types() -> list[str]:
+    configured = getattr(settings, "ADO_WORK_ITEM_TYPES", None)
+    if not configured:
+        return ["User Story", "Product Backlog Item"]
+    return [str(t).strip() for t in configured if str(t).strip()]
+
+
 def _fetch_ado_iterations(*, org: str, project: str, pat: str) -> list[dict]:
     org_encoded = urllib.parse.quote(org)
     project_encoded = urllib.parse.quote(project)
@@ -252,16 +260,21 @@ def _fetch_ado_iterations(*, org: str, project: str, pat: str) -> list[dict]:
     return items
 
 
-def _fetch_story_ids(*, org: str, project: str, pat: str) -> list[int]:
+def _fetch_story_ids(*, org: str, project: str, pat: str, work_item_types: list[str]) -> list[int]:
     org_encoded = urllib.parse.quote(org)
     project_encoded = urllib.parse.quote(project)
     url = f"https://dev.azure.com/{org_encoded}/{project_encoded}/_apis/wit/wiql?api-version=7.1-preview.2"
+
+    escaped_types = [t.replace("'", "''") for t in work_item_types]
+    if not escaped_types:
+        escaped_types = ["User Story"]
+    in_clause = ", ".join([f"'{t}'" for t in escaped_types])
 
     wiql = {
         "query": (
             "SELECT [System.Id] FROM WorkItems "
             "WHERE [System.TeamProject] = @project "
-            "AND [System.WorkItemType] = 'User Story' "
+            f"AND [System.WorkItemType] IN ({in_clause}) "
             "AND [System.State] <> 'Removed' "
             "ORDER BY [System.ChangedDate] DESC"
         )
@@ -496,6 +509,8 @@ def _persist_story_snapshot(*, stories: list[dict], synced_at) -> int:
 
     if seen_ids:
         ADOUserStory.objects.exclude(work_item_id__in=seen_ids).filter(is_active=True).update(is_active=False, last_synced_at=synced_at)
+    else:
+        ADOUserStory.objects.filter(is_active=True).update(is_active=False, last_synced_at=synced_at)
 
     return imported
 

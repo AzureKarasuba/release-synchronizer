@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block content %}
 <div class="card">
   <h2>Azure Mirror (Read-only Source View)</h2>
@@ -10,9 +10,13 @@
       Last synced: never
     {% endif %}
   </p>
+  {% if sync_state and sync_state.last_error %}
+    <p style="color: #b00020;"><strong>Last sync error:</strong> {{ sync_state.last_error }}</p>
+  {% endif %}
   {% if can_trigger_sync %}
     <p><a href="/?sync=1">Run Sync Now</a></p>
   {% endif %}
+  <p style="font-size: 0.9rem; color: #555;">If you seeded demo data, sample tickets remain visible until a successful Azure sync refreshes stories.</p>
 </div>
 
 {% for sprint, stories in stories_by_sprint.items %}
@@ -57,3 +61,4 @@
   <div class="card">No Azure tickets have been synced yet.</div>
 {% endfor %}
 {% endblock %}
+

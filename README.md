@@ -48,6 +48,22 @@ Set these in `.env`:
 - `ADO_PROJECT`
 - `ADO_PAT`
 - `ADO_SYNC_INTERVAL_SECONDS` (default `300`)
+- `ADO_WORK_ITEM_TYPES` (default `User Story,Product Backlog Item`)
+
+## Replace Demo Tickets With Your Azure Data
+If you ran `seed_demo_data`, two sample rows are inserted (`#10101`, `#10102`).
+To switch to your real Azure data:
+
+```bash
+python manage.py sync_ado --force
+```
+
+If sample rows still appear, clear local ticket cache once and re-sync:
+
+```bash
+python manage.py shell -c "from apps.integrations.models import ADOUserStory; ADOUserStory.objects.all().delete()"
+python manage.py sync_ado --force
+```
 
 ## Demo Users (seeded)
 - `rm_demo` (release manager)
