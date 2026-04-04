@@ -56,14 +56,14 @@
         {% if block.parent %}
           <tr class="parent-row">
             <td>#{{ block.parent.work_item_id }}</td>
-            <td colspan="8">{{ block.parent.type }}: {{ block.parent.title }}</td>
+            <td colspan="8"><span class="feature-label">{{ block.parent.type }}</span>{% if block.parent.display_url %}<a href="{{ block.parent.display_url }}" target="_blank" rel="noreferrer">{{ block.parent.title }}</a>{% else %}{{ block.parent.title }}{% endif %}</td>
           </tr>
         {% endif %}
 
         {% for story in block.stories %}
           <tr>
             <td class="mono">#{{ story.work_item_id }}</td>
-            <td>
+            <td{% if block.parent %} class="story-child-indent"{% endif %}>
               {% if block.parent %}
                 <span class="muted">-&gt;&nbsp;</span>
               {% endif %}
@@ -96,3 +96,7 @@
   <div class="card">No Azure tickets have been synced yet.</div>
 {% endfor %}
 {% endblock %}
+
+
+
+

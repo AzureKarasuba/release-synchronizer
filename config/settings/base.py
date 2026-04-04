@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "apps.audit",
     "apps.api",
     "apps.coordination",
+    "apps.status_reports",
 ]
 
 MIDDLEWARE = [
@@ -103,6 +104,9 @@ ADO_ORGANIZATION = os.getenv("ADO_ORGANIZATION", "")
 ADO_PROJECT = os.getenv("ADO_PROJECT", "")
 ADO_PAT = os.getenv("ADO_PAT", "")
 ADO_SYNC_INTERVAL_SECONDS = int(os.getenv("ADO_SYNC_INTERVAL_SECONDS", "300"))
+
+DEMO_PUBLIC_MODE = os.getenv("DEMO_PUBLIC_MODE", "True").lower() == "true"
+
 ADO_WORK_ITEM_TYPES = [
     t.strip() for t in os.getenv("ADO_WORK_ITEM_TYPES", "User Story,Product Backlog Item").split(",") if t.strip()
 ]
@@ -111,3 +115,11 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
+SITE_BASE_URL = os.getenv("SITE_BASE_URL", "http://127.0.0.1:8000")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@release-synchronizer.local")
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"

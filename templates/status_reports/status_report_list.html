@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .status-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .status-top .note {
+    font-size: 12px;
+    color: #8b8b8b;
+    margin-top: 4px;
+  }
+
+  .status-editor {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-sheet {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1160px;
+  }
+
+  .status-sheet th {
+    background: #fafafa;
+    border: 1px solid #ececec;
+    color: #8c8c8c;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 10px 8px;
+    font-weight: 700;
+  }
+
+  .status-sheet td {
+    border: 1px solid #efefef;
+    padding: 6px;
+    background: #fff;
+    vertical-align: middle;
+  }
+
+  .status-sheet input[type="text"],
+  .status-sheet input[type="date"],
+  .status-sheet select {
+    width: 100%;
+    min-width: 0;
+    border-radius: 8px;
+    font-size: 12px;
+    padding: 8px;
+    border: 1px solid #e1e1e1;
+    background: #fff;
+  }
+
+  .status-sheet .action-cell {
+    white-space: nowrap;
+    min-width: 150px;
+  }
+
+  .status-sheet .new-row td {
+    background: #f9f9f9;
+  }
+
+  .status-sheet .new-row input,
+  .status-sheet .new-row select {
+    background: #fff;
+  }
+
+  .status-tone-in_progress { color: #2d6cdf; }
+  .status-tone-action_required { color: #c67f0f; }
+  .status-tone-on_hold { color: #8a5adf; }
+  .status-tone-completed { color: #2c9a67; }
+  .status-tone-canceled { color: #cf4f4f; }
+
+  .status-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+
+  .subscribe-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .subscribe-box input[type="text"] {
+    min-width: 250px;
+  }
+</style>
+
+<div class="card">
+  <div class="status-top">
+    <div>
+      <h2>Status Report</h2>
+      <div class="note">デモ版ではユーザー体験展示のため、すべてのユーザーがStatus Reportを編集できます。本番版では本人確認（認証）が必要です。</div>
+    </div>
+    <div class="status-editor">
+      <label for="editor-name" class="muted">Editor</label>
+      <input id="editor-name" type="text" value="{{ demo_editor_name }}" placeholder="Name for audit" />
+    </div>
+  </div>
+</div>
+
+<div class="table-block">
+  <table class="status-sheet">
+    <thead>
+      <tr>
+        <th style="width: 19%;">Title</th>
+        <th style="width: 31%;">Content</th>
+        <th style="width: 11%;">Due Date</th>
+        <th style="width: 12%;">Owner</th>
+        <th style="width: 12%;">Status</th>
+        <th style="width: 7%;">Order</th>
+        <th style="width: 8%;">Updated By</th>
+        <th style="width: 10%;">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+        <tr>
+          <td>
+            <form id="sr-update-{{ item.id }}" method="post" action="{% url 'status-report-update' item.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="editor_name" data-editor-name-field="1" />
+            </form>
+            <input type="text" name="title" value="{{ item.title }}" form="sr-update-{{ item.id }}" required maxlength="200" />
+          </td>
+          <td><input type="text" name="content" value="{{ item.content }}" form="sr-update-{{ item.id }}" required /></td>
+          <td><input type="date" name="due_date" value="{{ item.due_date|date:'Y-m-d' }}" form="sr-update-{{ item.id }}" /></td>
+          <td><input type="text" name="owner_name" value="{{ item.owner_name }}" form="sr-update-{{ item.id }}" required maxlength="120" /></td>
+          <td>
+            <select name="status" form="sr-update-{{ item.id }}" class="status-select" data-current="{{ item.status }}">
+              <option value="in_progress" {% if item.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+              <option value="action_required" {% if item.status == 'action_required' %}selected{% endif %}>Action Required</option>
+              <option value="on_hold" {% if item.status == 'on_hold' %}selected{% endif %}>On Hold</option>
+              <option value="completed" {% if item.status == 'completed' %}selected{% endif %}>Completed</option>
+              <option value="canceled" {% if item.status == 'canceled' %}selected{% endif %}>Canceled</option>
+            </select>
+          </td>
+          <td><input type="text" name="order_index" value="{{ item.order_index }}" form="sr-update-{{ item.id }}" /></td>
+          <td>{{ item.updated_by_display_name|default:"-" }}</td>
+          <td class="action-cell">
+            <button type="submit" form="sr-update-{{ item.id }}">Save</button>
+            <form method="post" action="{% url 'status-report-delete' item.id %}" style="display:inline; margin-left:6px;">
+              {% csrf_token %}
+              <input type="hidden" name="editor_name" data-editor-name-field="1" />
+              <button type="submit" class="btn-ghost" onclick="return confirm('Delete this row?');">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+
+      <tr class="new-row">
+        <td>
+          <form id="sr-create" method="post" action="{% url 'status-report-create' %}">
+            {% csrf_token %}
+            <input type="hidden" name="editor_name" data-editor-name-field="1" />
+          </form>
+          <input type="text" name="title" placeholder="New row title" form="sr-create" required maxlength="200" />
+        </td>
+        <td><input type="text" name="content" placeholder="Description" form="sr-create" required /></td>
+        <td><input type="date" name="due_date" form="sr-create" /></td>
+        <td><input type="text" name="owner_name" placeholder="Owner" form="sr-create" required maxlength="120" /></td>
+        <td>
+          <select name="status" form="sr-create" class="status-select" data-current="in_progress">
+            <option value="in_progress">In Progress</option>
+            <option value="action_required">Action Required</option>
+            <option value="on_hold">On Hold</option>
+            <option value="completed">Completed</option>
+            <option value="canceled">Canceled</option>
+          </select>
+        </td>
+        <td><input type="text" name="order_index" value="100" form="sr-create" /></td>
+        <td>-</td>
+        <td class="action-cell">
+          <button type="submit" form="sr-create">Add Row</button>
+        </td>
+      </tr>
+
+      {% if not items %}
+        <tr>
+          <td colspan="8" class="muted">No rows yet. Use the bottom row to add the first item.</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <div class="status-footer">
+    <span class="chip">Verified Subscribers: {{ subscriber_count }}</span>
+    <form method="post" action="{% url 'status-report-subscribe' %}" class="subscribe-box">
+      {% csrf_token %}
+      <input type="hidden" name="editor_name" data-editor-name-field="1" />
+      <input type="text" name="email" placeholder="email for daily report" required />
+      <button type="submit">Request Subscription</button>
+      <span class="muted" style="font-size:12px;">Verification required before daily sending.</span>
+    </form>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var editorInput = document.getElementById('editor-name');
+    var hiddenFields = document.querySelectorAll('[data-editor-name-field="1"]');
+    var statusSelects = document.querySelectorAll('.status-select');
+
+    function syncEditorName() {
+      var value = (editorInput && editorInput.value ? editorInput.value : '').trim();
+      hiddenFields.forEach(function (field) {
+        field.value = value;
+      });
+    }
+
+    function applyStatusTone(select) {
+      select.classList.remove(
+        'status-tone-in_progress',
+        'status-tone-action_required',
+        'status-tone-on_hold',
+        'status-tone-completed',
+        'status-tone-canceled'
+      );
+      select.classList.add('status-tone-' + select.value);
+    }
+
+    if (editorInput) {
+      editorInput.addEventListener('input', syncEditorName);
+    }
+
+    statusSelects.forEach(function (select) {
+      applyStatusTone(select);
+      select.addEventListener('change', function () {
+        applyStatusTone(select);
+      });
+    });
+
+    syncEditorName();
+  })();
+</script>
+{% endblock %}

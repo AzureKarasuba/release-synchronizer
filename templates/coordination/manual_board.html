@@ -109,7 +109,7 @@
           {% if block.parent %}
             <tr class="parent-row">
               <td>#{{ block.parent.work_item_id }}</td>
-              <td colspan="6">{{ block.parent.type }}: {{ block.parent.title }}</td>
+              <td colspan="6"><span class="feature-label">{{ block.parent.type }}</span>{% if block.parent.display_url %}<a href="{{ block.parent.display_url }}" target="_blank" rel="noreferrer">{{ block.parent.title }}</a>{% else %}{{ block.parent.title }}{% endif %}</td>
             </tr>
           {% endif %}
 
@@ -121,7 +121,7 @@
               {% if can_edit %}draggable="true"{% endif %}
             >
               <td class="mono">#{{ story.work_item_id }}</td>
-              <td>
+              <td{% if block.parent %} class="story-child-indent"{% endif %}>
                 {% if block.parent %}
                   <span class="muted">-&gt;&nbsp;</span>
                 {% endif %}
@@ -333,4 +333,7 @@
 </script>
 {% endif %}
 {% endblock %}
+
+
+
 

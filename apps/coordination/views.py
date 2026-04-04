@@ -4,8 +4,7 @@ from datetime import date
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.views.decorators.http import require_POST
@@ -13,7 +12,7 @@ from django.views.generic import TemplateView
 
 from apps.audit.services import create_audit_event
 from apps.common.constants import RoleType
-from apps.common.permissions import RoleRequiredMixin, user_has_any_role
+from apps.common.permissions import user_has_any_role
 from apps.coordination.services import (
     assign_story_to_release,
     build_story_hierarchy_blocks,
@@ -48,6 +47,12 @@ DIFF_ROLES = {
     RoleType.ENGINEERING_LEAD,
     RoleType.SYSTEM_ADMIN,
 }
+
+
+def _has_role_access(user, roles: set[str] | tuple[str, ...]) -> bool:
+    if getattr(settings, "DEMO_PUBLIC_MODE", False):
+        return True
+    return user_has_any_role(user, roles)
 
 
 def _default_story_link(work_item_id: int) -> str:
@@ -91,6 +96,14 @@ def _active_stories_with_links(*, order_fields: tuple[str, ...]) -> list[ADOUser
     return stories
 
 
+
+def _attach_parent_links(blocks: list[dict]) -> list[dict]:
+    for block in blocks:
+        parent = block.get("parent")
+        if parent and parent.get("work_item_id"):
+            parent["display_url"] = _default_story_link(parent["work_item_id"])
+    return blocks
+
 def _build_mirror_groups(stories: list[ADOUserStory], span_map: dict[str, dict]) -> dict[str, dict]:
     grouped_raw: dict[str, list] = {}
     for story in stories:
@@ -100,7 +113,7 @@ def _build_mirror_groups(stories: list[ADOUserStory], span_map: dict[str, dict])
     for sprint_name, sprint_stories in grouped_raw.items():
         grouped[sprint_name] = {
             "count": len(sprint_stories),
-            "blocks": build_story_hierarchy_blocks(sprint_stories),
+            "blocks": _attach_parent_links(build_story_hierarchy_blocks(sprint_stories)),
             "span": span_map.get(sprint_name),
         }
     return grouped
@@ -136,7 +149,7 @@ def _build_manual_groups(stories: list[ADOUserStory]) -> tuple[list[dict], list[
     ordered_groups = sorted(grouped.values(), key=lambda g: (g["release"].is_auto_generated, g["release"].name.lower()))
     for idx, group in enumerate(ordered_groups, start=1):
         group["release_label"] = release_label_by_id.get(group["release"].id, f"Release {idx}")
-        group["story_blocks"] = build_story_hierarchy_blocks(group["stories"])
+        group["story_blocks"] = _attach_parent_links(build_story_hierarchy_blocks(group["stories"]))
         group["release_date_value"] = group["release"].target_end_date.isoformat() if group["release"].target_end_date else ""
 
     release_options = [
@@ -268,12 +281,16 @@ def _export_manual_csv(groups: list[dict]) -> HttpResponse:
     return response
 
 
-class AzureMirrorView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+class AzureMirrorView(TemplateView):
     template_name = "coordination/azure_mirror.html"
-    allowed_roles = VIEWER_ROLES
+
+    def dispatch(self, request, *args, **kwargs):
+        if not _has_role_access(request.user, VIEWER_ROLES):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
 
     def get(self, request, *args, **kwargs):
-        if request.GET.get("sync") == "1" and user_has_any_role(request.user, EDITOR_ROLES):
+        if request.GET.get("sync") == "1" and _has_role_access(request.user, EDITOR_ROLES):
             result = sync_ado_everything(force=True)
             messages.info(
                 request,
@@ -295,13 +312,17 @@ class AzureMirrorView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
 
         context["stories_by_sprint"] = _build_mirror_groups(stories=stories, span_map=span_map)
         context["sync_state"] = get_story_sync_state()
-        context["can_trigger_sync"] = user_has_any_role(self.request.user, EDITOR_ROLES)
+        context["can_trigger_sync"] = _has_role_access(self.request.user, EDITOR_ROLES)
         return context
 
 
-class ManualReleaseBoardView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+class ManualReleaseBoardView(TemplateView):
     template_name = "coordination/manual_board.html"
-    allowed_roles = VIEWER_ROLES
+
+    def dispatch(self, request, *args, **kwargs):
+        if not _has_role_access(request.user, VIEWER_ROLES):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
 
     def get(self, request, *args, **kwargs):
         if request.GET.get("export") == "csv":
@@ -317,13 +338,17 @@ class ManualReleaseBoardView(LoginRequiredMixin, RoleRequiredMixin, TemplateView
         groups, release_options = _build_manual_groups(stories=stories)
         context["release_groups"] = groups
         context["release_options"] = release_options
-        context["can_edit"] = user_has_any_role(self.request.user, EDITOR_ROLES)
+        context["can_edit"] = _has_role_access(self.request.user, EDITOR_ROLES)
         return context
 
 
-class DiffApplyView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+class DiffApplyView(TemplateView):
     template_name = "coordination/diff_apply.html"
-    allowed_roles = VIEWER_ROLES
+
+    def dispatch(self, request, *args, **kwargs):
+        if not _has_role_access(request.user, VIEWER_ROLES):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -333,14 +358,13 @@ class DiffApplyView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
             .order_by("work_item_id")
         )
         context["rows"] = get_manual_diff_rows(stories=stories)
-        context["can_edit_diff"] = user_has_any_role(self.request.user, DIFF_ROLES)
+        context["can_edit_diff"] = _has_role_access(self.request.user, DIFF_ROLES)
         return context
 
 
-@login_required
 @require_POST
 def move_story_to_release(request):
-    if not user_has_any_role(request.user, EDITOR_ROLES):
+    if not _has_role_access(request.user, EDITOR_ROLES):
         return JsonResponse({"detail": "forbidden"}, status=403)
 
     story_id = request.POST.get("story_id")
@@ -360,10 +384,9 @@ def move_story_to_release(request):
     return redirect("manual-board")
 
 
-@login_required
 @require_POST
 def bulk_move_stories_to_release(request):
-    if not user_has_any_role(request.user, EDITOR_ROLES):
+    if not _has_role_access(request.user, EDITOR_ROLES):
         return JsonResponse({"detail": "forbidden"}, status=403)
 
     release_id = request.POST.get("release_id")
@@ -399,10 +422,9 @@ def bulk_move_stories_to_release(request):
     return redirect("manual-board")
 
 
-@login_required
 @require_POST
 def create_manual_release(request):
-    if not user_has_any_role(request.user, EDITOR_ROLES):
+    if not _has_role_access(request.user, EDITOR_ROLES):
         return JsonResponse({"detail": "forbidden"}, status=403)
 
     raw_name = (request.POST.get("name") or "").strip()
@@ -445,10 +467,9 @@ def create_manual_release(request):
     return redirect("manual-board")
 
 
-@login_required
 @require_POST
 def delete_manual_release(request, release_id: int):
-    if not user_has_any_role(request.user, EDITOR_ROLES):
+    if not _has_role_access(request.user, EDITOR_ROLES):
         return JsonResponse({"detail": "forbidden"}, status=403)
 
     release = get_object_or_404(ReleasePlan, pk=release_id)
@@ -505,10 +526,9 @@ def delete_manual_release(request, release_id: int):
     )
     return redirect("manual-board")
 
-@login_required
 @require_POST
 def update_release_target_date(request, release_id: int):
-    if not user_has_any_role(request.user, EDITOR_ROLES):
+    if not _has_role_access(request.user, EDITOR_ROLES):
         return JsonResponse({"detail": "forbidden"}, status=403)
 
     release = get_object_or_404(ReleasePlan, pk=release_id)
@@ -538,16 +558,22 @@ def update_release_target_date(request, release_id: int):
     return redirect("manual-board")
 
 
-@login_required
 @require_POST
 def reset_story_to_azure(request, story_id: int):
-    if not user_has_any_role(request.user, DIFF_ROLES):
+    if not _has_role_access(request.user, DIFF_ROLES):
         return JsonResponse({"detail": "forbidden"}, status=403)
 
     story = get_object_or_404(ADOUserStory, pk=story_id)
     reset_story_assignment_to_azure(story=story, actor=request.user, reason="Reset from diff screen")
     messages.success(request, f"Story #{story.work_item_id} reset to Azure default.")
     return redirect("diff-apply")
+
+
+
+
+
+
+
 
 
 

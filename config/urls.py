@@ -8,6 +8,7 @@ urlpatterns = [
 
     # Primary product flow
     path("", include("apps.coordination.urls")),
+    path("status-report/", include("apps.status_reports.urls")),
     path("audit/", include("apps.audit.urls")),
 
     # Legacy/internal pages kept for reference during transition
